@@ -1,0 +1,283 @@
+---
+title: "DFS Lineup Optimizer"
+author: "Jake Berberian"
+date: "9/20/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r library}
+library(data.table)
+library(dtplyr)
+library(tidyverse)
+library(ffanalytics)
+library(lpSolve)
+library(rPref)
+library(kableExtra)
+library(plotly)
+library(tictoc)
+```
+
+## Set Up
+
+We'll set the week, as well as all of FanDuel's scoring rules. 
+```{r specs}
+week <- 2
+
+scoring <- list(
+  pass = list(
+    pass_att = 0, pass_comp = 0, pass_inc = 0, pass_yds = 0.04, pass_tds = 4,
+    pass_int = -1, pass_40_yds = 0,  pass_300_yds = 0, pass_350_yds = 0,
+    pass_400_yds = 0
+  ),
+  rush = list(
+    all_pos = TRUE,
+    rush_yds = 0.1,  rush_att = 0, rush_40_yds = 0, rush_tds = 6,
+    rush_100_yds = 0, rush_150_yds = 0, rush_200_yds = 0),
+  rec = list(
+    all_pos = TRUE,
+    rec = 0.5, rec_yds = 0.1, rec_tds = 6, rec_40_yds = 0, rec_100_yds = 0,
+    rec_150_yds = 0, rec_200_yds = 0
+  ),
+  misc = list(
+    all_pos = TRUE,
+    fumbles_lost = -2, fumbles_total = 0,
+    sacks = 0, two_pts = 2
+  ),
+  ret = list(
+    all_pos = TRUE,
+    return_tds = 6, return_yds = 0
+  ),
+  dst = list(
+    dst_fum_rec = 2,  dst_int = 2, dst_safety = 2, dst_sacks = 1, dst_td = 6,
+    dst_blk = 2, dst_ret_yds = 0, dst_pts_allowed = 0
+  ),
+  pts_bracket = list(
+    list(threshold = 0, points = 10),
+    list(threshold = 1, points = 7),
+    list(threshold = 7, points = 4),
+    list(threshold = 14, points = 1),
+    list(threshold = 21, points = 0),
+    list(threshold = 28, points = -1),
+    list(threshold = 35, points = -4)
+  )
+)
+```
+
+
+## Data Scrape & Clean
+```{r scrape, results = "hide"}
+sources <- c('CBS', 'ESPN', 'Yahoo', 'FantasySharks', 'FantasyPros', 'FantasyData', 'FleaFlicker')
+
+scrape <- scrape_data(src = sources,
+                      pos=c('QB', 'RB', 'WR', 'TE', 'DST'),
+                      season = 2020, 
+                      week = week)
+```
+
+
+```{r add_proj}
+projections <- projections_table(scrape, scoring_rules = scoring) %>%
+  add_player_info()
+
+knitr::kable(head(projections))
+```
+
+The goal is to figure out a data scrape, so all I have to do is run it.
+```{r add_fd}
+fan_duel <- read_csv("~/Fall_2020/MATH-390/Data/FanDuel-NFL-2020-09-20-49877-players-list.csv") %>% 
+  filter(is.na(`Injury Indicator`) | `Injury Indicator` == "Q") %>% 
+  mutate(`Last Name` = str_remove_all(`Last Name`, "((?i)III(?-i))"),
+         `Last Name` = str_remove_all(`Last Name`, "((?i)II(?-i))"),
+         `Last Name` = str_remove_all(`Last Name`, "((?i)IV(?-i))"),
+         `Last Name` = str_remove_all(`Last Name`, "((?i)V(?-i))"),
+         `Last Name` = str_remove_all(`Last Name`, "((?i)Jr.(?-i))"),
+         `Last Name` = str_remove_all(`Last Name`, "((?i)Sr.(?-i))"),
+         Name = str_c(`First Name`, `Last Name`, sep = " ")) %>% 
+  select(-c(Id, Games, Tier, X15, X16)) %>% 
+  mutate(position = case_when(
+    Position == "D" ~ "DST",
+    TRUE ~ as.character(Position)
+  ))
+
+knitr::kable(head(fan_duel))
+```
+
+## Lineup Generator Function
+
+Our wonderufl linear prgramming-driven function. We set constraints here. 
+```{r gen_lineup}
+generate_lineup <- function(n){
+  pred_sal <- projections %>% 
+    filter(avg_type == "robust") %>% 
+    mutate(Name = str_c(first_name, last_name, sep = " ")) %>% 
+    inner_join(fan_duel, by = c("Name", "position")) %>% 
+    select(position, Name, team, points, Salary, sd_pts) %>% 
+    drop_na(points, Salary) %>% 
+    group_by(Name) %>% 
+    mutate(sal_max = max(Salary)) %>%
+    filter(Salary == sal_max) %>%
+    group_by(Name) %>% 
+    mutate(pts_pred = rnorm(1, points, sd_pts), lineup = n) %>% 
+    select(-sal_max)
+  
+  
+    obj <- pred_sal$pts_pred
+    
+    mat <- rbind(t(model.matrix(~ position + 0,pred_sal)), 
+               t(model.matrix(~ position + 0,pred_sal)), 
+               rep(1, nrow(pred_sal)), pred_sal$Salary)
+    
+    dir <- c("=","=","<=","<=","<=", "=","=",">=",">=",">=","=","<=")
+    
+    rhs <- c(1, 1, 3, 2, 4, 1, 1, 2, 1, 3, 9, 60000)
+  
+  result <- lp("max", obj, mat, dir, rhs, all.bin = TRUE)   
+  
+  results <- pred_sal[which(result$solution == 1),]
+  
+  return(results)
+}
+```
+
+## Simulation Time!
+
+We'll iterate our lineup generator function 1,000 times (usually we'll do this 10,000, but this is an example). 
+```{r sim_lineups}
+n_sims <- 1000
+
+tic()
+sim_lu <- map_df(1:n_sims, generate_lineup) %>%
+  rename(pts_base = points) %>%  
+  mutate(position = factor(position, 
+                           levels = c("QB", "RB", "WR", "TE", "DST"))) %>% 
+  select(lineup, Name, team, position, pts_base, pts_pred, sd_pts, Salary)
+toc()
+```
+
+## Results/Exploration
+
+Looking at the first three lineups from our simulation.
+```{r first_three}
+sim_lu %>%
+  filter(lineup <= 3) %>%
+  arrange(lineup, position, desc(pts_pred)) %>%
+  knitr::kable() %>%
+  kable_styling() %>%
+  column_spec(1, bold=TRUE) %>%
+  collapse_rows(columns = 1, valign = 'top')
+```
+
+Next, we'll look at which players were the most commonly chosen by our model. 
+```{r top10pos}
+ggplotly(sim_lu %>% 
+           group_by(Name, position, Salary) %>% 
+           dplyr::summarize(lu = n_distinct(lineup)) %>% 
+           ungroup() %>% 
+           group_by(position) %>% 
+           top_n(10, lu) %>% 
+           ungroup() %>% 
+           arrange(position, desc(lu)) %>% 
+           mutate(Name = factor(Name),
+                  Name = fct_reorder(Name, lu)) %>% 
+           ggplot(aes(x = Name, y = round(lu / n_sims, 2), fill = Salary,
+                      text = paste(Name, "in", lu, "lineups with", Salary, "salary"))) +
+           geom_bar(stat = "identity") +
+           facet_wrap(~position, ncol = 2, scales = "free_y") +
+           coord_flip() +
+           scale_fill_viridis_c() +
+           xlab("") +
+           ylab("Lineups (thousands)") +
+           ggtitle("Top 10 Players By Position")) %>% 
+  ggplotly(tooltip = "text")
+```
+
+We'll explore the same question as above, but in a different form. 
+```{r who}
+plyr_lu <- sim_lu %>%
+  group_by(Name, position) %>%
+  dplyr::summarize(lu = n_distinct(lineup)) %>%
+  ungroup() 
+
+ggplotly(projections %>% 
+           filter(avg_type == "weighted") %>%
+           mutate(Name = str_c(first_name, last_name, sep = " ")) %>% 
+           inner_join(fan_duel, by = c("Name", "position")) %>%
+           select(Name, team, position, points, Salary, sd_pts) %>%
+           left_join(plyr_lu, by = 'Name') %>%
+           replace_na(list(lu = 0)) %>%
+           mutate(lu_bin = case_when(
+             lu == 0 ~ "0 Lineups",
+             TRUE ~ ">=1 Lineup"), 
+             lu_5 = cut(lu, 5, labels = FALSE)) %>%              
+           ggplot(aes(x=Salary, y=points, color=lu_bin, size=sd_pts, text=Name)) +
+           geom_point() +
+           theme_minimal() +
+           scale_color_manual(values = c('red', 'blue'), name="") +
+           geom_smooth(inherit.aes = FALSE, aes(x = Salary, y = points), method = 'lm') +
+           ylab('Projected Points') +
+           xlab('Salary') +
+           ggtitle('Who makes it into Optimized Lineups?') +
+           scale_x_continuous(labels=scales::dollar))
+```
+
+We'll check our which position our model favors for the FLEX spot. Since this is only 0.5 PPR, there will be a blend of high upside RBs and solid, undervalued WRs. If this was full PPR, there may be some TEs, but I'd be surprised if there were too many tight ends here. 
+```{r flex_pos}
+sim_lu %>%
+  group_by(lineup) %>%
+  mutate(lineup_pts=sum(pts_pred)) %>%
+  group_by(lineup, position) %>%
+  mutate(n = n()) %>%
+  select(lineup, position, n, lineup_pts) %>%
+  distinct() %>%
+  spread(key=position, value=n) %>%
+  filter(RB>=2, TE>=1, WR>=3) %>%
+  mutate(flex=case_when(RB==3 ~ 'RB',
+                        TE==2 ~ 'TE',
+                        WR==4 ~ 'WR')) %>%
+  group_by(flex) %>%
+  dplyr::summarize(pts=median(lineup_pts),
+                   cases=n()) %>%
+  knitr::kable() %>%
+  kable_styling(full_width = FALSE)
+```
+
+Now we'll look at our lineups and "bold" our Pareto lineups. These are the lineups where the points is maximized, while the uncertainty is minimzed. These are good for the cash games. 
+```{r pareto_lineups_plot}
+lu_df <- sim_lu %>%
+  group_by(lineup) %>%
+  dplyr::summarize(lineup_pts=sum(pts_pred),
+                   lineup_sd=sum(sd_pts)) %>%
+  ungroup()
+
+pto <- psel(lu_df, low(lineup_sd) * high(lineup_pts))
+
+
+ggplot(lu_df, aes(y=lineup_pts, x=lineup_sd)) +
+  geom_point() +
+  geom_point(data=pto, size=5) +
+  ylab('Lineup Points') +
+  xlab('Lineup Points St Dev') +
+  ggtitle('Lineup Points vs Uncertainty',
+          subtitle = 'Pareto Lineups Bolded')
+```
+
+Not let's look at some of the "best" Pareto lineups. In other words, those that achieve the optimization as described above. 
+```{r pareto_lineups}
+psel(lu_df, low(lineup_sd) * high(lineup_pts)) %>%
+  left_join(sim_lu, by='lineup') %>%
+  group_by(lineup) %>%
+  arrange(lineup_pts, position, desc(Salary)) %>%
+  select(lineup, lineup_pts, lineup_sd, Name, team, position, pts_pred, sd_pts, Salary) %>%
+  mutate_at(vars(lineup_pts, lineup_sd, pts_pred, sd_pts), function(x) round(x, 2)) %>%
+  knitr::kable() %>%
+  kable_styling(fixed_thead = T) %>%
+  column_spec(1:3, bold=TRUE) %>%
+  collapse_rows(columns = 1:3, valign = 'top') %>%
+  scroll_box(height = '700px', width = '100%')
+```
+
+
