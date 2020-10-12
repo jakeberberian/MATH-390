@@ -11,3 +11,7 @@ This repository is all my code and outputs from my exploration of the NFL. MATH-
 The following is a more in-depth course description that was submitted and approved by the university:
 
 This course will utilize the programming languages R and Python and their libraries (such as pandas, randomForest, and tidyverse) to better understand fantasy football analytics. How decisions are made in the NFL, ranging from the annual NFL draft to free-agent signings will be investigated. Additionally, the $7 billion industry of fantasy football will be researched. Ranging from drafting to in-season transactions, every decision throughout the NFL can be mathematically modeled. Using statistical techniques and modeling, value will attempt to be assigned to these decisions.  The intersection of football and fantasy football will be researched, answering questions such as "Do the NFL teams with better fantasy football players win more game?".  The course will include R and Python-based projects, as well as the playing out of a fantasy football season– with every decision being explained and mathematically-sound. 
+
+
+
+Since the .htmls are not the most readable, they can be found at https://rpubs.com/jberberian/ in some form. I started publishing the during Week 5, but that simulation is not the same as the one in this repo. However, from week 6 on, the RPubs and GitHub outputs will be identical. 
