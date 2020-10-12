@@ -135,7 +135,7 @@ generate_lineup <- function(n){
 
 # Simulation Time!
 ```{r sim_time}
-n_sims <- 50000
+n_sims <- 10000
 
 tic()
 sim_lu <- map_df(1:n_sims, generate_lineup) %>%
