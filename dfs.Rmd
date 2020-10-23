@@ -1,0 +1,381 @@
+---
+title: "DFS Week 7" 
+author: "Jake Berberian"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r library, include = FALSE}
+library(tidyverse)
+library(ffanalytics)
+library(lpSolve)
+library(rPref)
+library(kableExtra)
+library(ggimage)
+library(plotly)
+library(tictoc)
+```
+
+```{r info}
+week <- 7
+fd_data <- "~/Fall_2020/MATH-390/Data/FanDuel-NFL-2020-10-25-51091-players-list.csv"
+dk_data <- "~/Fall_2020/MATH-390/Data/DKSalaries.csv"
+```
+
+```{r colors}
+logos <- read_csv("https://raw.githubusercontent.com/leesharpe/nfldata/master/data/teamcolors.csv") %>% 
+  rename("Team" = "team")
+```
+
+
+```{r fd_specs, include = FALSE}
+scoring_fd <- list(
+  pass = list(
+    pass_att = 0, pass_comp = 0, pass_inc = 0, pass_yds = 0.04, pass_tds = 4,
+    pass_int = -1, pass_40_yds = 0,  pass_300_yds = 0, pass_350_yds = 0,
+    pass_400_yds = 0
+  ),
+  rush = list(
+    all_pos = TRUE,
+    rush_yds = 0.1,  rush_att = 0, rush_40_yds = 0, rush_tds = 6,
+    rush_100_yds = 0, rush_150_yds = 0, rush_200_yds = 0),
+  rec = list(
+    all_pos = TRUE,
+    rec = 0.5, rec_yds = 0.1, rec_tds = 6, rec_40_yds = 0, rec_100_yds = 0,
+    rec_150_yds = 0, rec_200_yds = 0
+  ),
+  misc = list(
+    all_pos = TRUE,
+    fumbles_lost = -2, fumbles_total = 0,
+    sacks = 0, two_pts = 2
+  ),
+  ret = list(
+    all_pos = TRUE,
+    return_tds = 6, return_yds = 0
+  ),
+  dst = list(
+    dst_fum_rec = 2,  dst_int = 2, dst_safety = 2, dst_sacks = 1, dst_td = 6,
+    dst_blk = 2, dst_ret_yds = 0, dst_pts_allowed = 0
+  ),
+  pts_bracket = list(
+    list(threshold = 0, points = 10),
+    list(threshold = 1, points = 7),
+    list(threshold = 7, points = 4),
+    list(threshold = 14, points = 1),
+    list(threshold = 21, points = 0),
+    list(threshold = 28, points = -1),
+    list(threshold = 35, points = -4)
+  )
+)
+```
+
+```{r dk_specs, include = FALSE}
+scoring_dk <- list(
+  pass = list(
+    pass_att = 0, pass_comp = 0, pass_inc = 0, pass_yds = 0.04, pass_tds = 4,
+    pass_int = -1, pass_40_yds = 0,  pass_300_yds = 3, pass_350_yds = 0,
+    pass_400_yds = 0
+  ),
+  rush = list(
+    all_pos = TRUE,
+    rush_yds = 0.1,  rush_att = 0, rush_40_yds = 0, rush_tds = 6,
+    rush_100_yds = 3, rush_150_yds = 0, rush_200_yds = 0),
+  rec = list(
+    all_pos = TRUE,
+    rec = 1, rec_yds = 0.1, rec_tds = 6, rec_40_yds = 0, rec_100_yds = 3,
+    rec_150_yds = 0, rec_200_yds = 0
+  ),
+  misc = list(
+    all_pos = TRUE,
+    fumbles_lost = -1, fumbles_total = 0,
+    sacks = 0, two_pts = 2
+  ),
+  ret = list(
+    all_pos = TRUE,
+    return_tds = 6, return_yds = 0
+  ),
+  dst = list(
+    dst_fum_rec = 2,  dst_int = 2, dst_safety = 2, dst_sacks = 1, dst_td = 6,
+    dst_blk = 2, dst_ret_yds = 0, dst_pts_allowed = 0
+  ),
+  pts_bracket = list(
+    list(threshold = 0, points = 10),
+    list(threshold = 1, points = 7),
+    list(threshold = 7, points = 4),
+    list(threshold = 14, points = 1),
+    list(threshold = 21, points = 0),
+    list(threshold = 28, points = -1),
+    list(threshold = 35, points = -4)
+  )
+)
+```
+
+```{r scrape, results = "hide"}
+sources <- c("ESPN", "FantasyData", "FantasyPros", "FantasySharks", 
+             "Yahoo", "FantasyFootballNerd", "NumberFire",
+             "RTSports", "Walterfootball")
+
+scrape <- scrape_data(src = sources,
+                      pos = c('QB', 'RB', 'WR', 'TE', 'DST'),
+                      season = 2020, 
+                      week = week)
+```
+
+
+```{r add_proj}
+projections_fd <- projections_table(scrape, scoring_rules = scoring_fd) %>% 
+  add_player_info()
+
+projections_dk <- projections_table(scrape, scoring_rules = scoring_dk) %>% 
+  add_player_info()
+```
+
+```{r add_dk}
+draft_kings <- read_csv(dk_data) %>% 
+  mutate(Name = str_remove_all(Name, "((?i)III(?-i))"),
+         Name = str_remove_all(Name, "((?i)II(?-i))"),
+         Name = str_remove_all(Name, "((?i)IV(?-i))"),
+         Name = str_remove_all(Name, "((?i)Jr.(?-i))"),
+         Name = str_remove_all(Name, "((?i)Sr.(?-i))"),
+         Name = case_when(Name == "Will Fuller V" ~ "Will Fuller",
+                          TRUE ~ Name)) %>% 
+  select(Position, Name, Salary, TeamAbbrev) %>% 
+  rename("salary_dk" = "Salary", "Team" = "TeamAbbrev")
+```
+
+
+```{r add_fd}
+fan_duel <- read_csv(fd_data) %>% 
+  mutate(Position = case_when(Position == "D" ~ "DST",
+    TRUE ~ Position)) %>% 
+  mutate(`Last Name` = str_remove_all(`Last Name`, "((?i)III(?-i))"),
+         `Last Name` = str_remove_all(`Last Name`, "((?i)II(?-i))"),
+         `Last Name` = str_remove_all(`Last Name`, "((?i)IV(?-i))"),
+         `Last Name` = str_remove_all(`Last Name`, "((?i)Jr.(?-i))"),
+         `Last Name` = str_remove_all(`Last Name`, "((?i)Sr.(?-i))"),
+         Name = case_when(Position == "DST" ~ `Last Name`,
+                          TRUE ~ str_c(`First Name`, `Last Name`, sep = " ")),
+         Name = case_when(Name == "Will Fuller V" ~ "Will Fuller",
+                          Name == "Football Team" ~ "WAS Football Team",
+                          TRUE ~ Name)) %>% 
+  select(Position, Name, Salary, Team, `Injury Indicator`) %>% 
+  rename("salary_fd" = "Salary") %>% 
+  mutate(Team = case_when(Team == "JAC" ~ "JAX",
+                          TRUE ~ Team))
+```
+
+
+```{r join_proj}
+projections_dk <- projections_dk %>% 
+  rename("points_dk" = "points", "drop_off_dk" = "drop_off", "sd_pts_dk" = "sd_pts", "floor_dk" = "floor", "ceiling_dk" = "ceiling") %>% 
+  select(-c(age, exp, pos_rank, tier, pos))
+
+projections_fd <- projections_fd %>% 
+  rename("points_fd" = "points", "drop_off_fd" = "drop_off", "sd_pts_fd" = "sd_pts", "floor_fd" = "floor", "ceiling_fd" = "ceiling") %>% 
+  select(-c(age, exp, pos_rank, tier, pos))
+
+projections <- full_join(projections_dk, projections_fd) %>% 
+  mutate(position = factor(position, 
+                           levels = c("QB", "RB", "WR", "TE", "DST")),
+         Name = case_when(position == "DST" ~ last_name,
+                          TRUE ~ str_c(first_name, last_name, sep = " "))) %>% 
+  mutate(Name = case_when(Name == "Will Fuller V" ~ "Will Fuller",
+                          Name == "Football Team" ~ "WAS Football Team",
+                          TRUE ~ Name))
+```
+
+
+
+```{r}
+salaries <- draft_kings %>% 
+  inner_join(fan_duel) %>% 
+  filter(is.na(`Injury Indicator`) | `Injury Indicator` == "Q")
+
+total <- projections %>% 
+  full_join(salaries, by = "Name") %>% 
+  filter(avg_type == "robust") %>% 
+  select(Position, Name, Team, points_dk, salary_dk, sd_pts_dk, salary_fd, points_fd, sd_pts_fd) %>% 
+  drop_na(salary_dk) %>% 
+  mutate(Position = factor(Position, 
+                           levels = c("QB", "RB", "WR", "TE", "DST")))
+```
+
+
+
+# Data Exploration
+
+We'll look at how much the scoring systems for FanDuel and DraftKings differ from our projections scrape. 
+
+```{r proj_pt_comp}
+ggplotly(total %>% 
+           ggplot(aes(x = points_dk, y = points_fd, col = Position, text = paste0(Name, ", ", Team))) +
+           geom_point() + 
+           xlab("DraftKings Proj. Points") + 
+           ylab("FanDuel Proj. Points")) 
+```
+
+
+It seems that WRs certainly get a point boost from being on DraftKings, which makes sense as DraftKings is full PPR and includes 100+ yard game bonuses. The difference gets slimmer when we look at RB (specifically in the higher tiers) and even more so when looking at QBs. 
+
+
+```{r salary_comp}
+ggplotly(total %>% 
+           mutate(salary_prop_dk = round(salary_dk / 50000, 3) * 100,
+                  salary_prop_fd = round(salary_fd / 60000, 3) * 100) %>% 
+           ggplot(aes(x = salary_prop_dk, y = salary_prop_fd, 
+                      col = Position,
+                      text = paste0(Name, ", ", Team))) +
+           geom_point() + 
+           xlab("Proportion of Salary Cap (DraftKings)") + 
+           ylab("Proportion of Salary Cap (FanDuel)"))
+```
+
+As we can see, there is some variation near the top, but overall the data is relatively clustered with no large outliers. We see a wide variation in QBs, WRs, and RBs which is to be expected- since there are so many rostered at each position. Now, let's look at FanDuel and DraftKings separately to see if there are any plays that we can exploit. 
+
+
+```{r fd_pts_sal}
+ggplotly(total %>% 
+           ggplot(aes(x = salary_fd, y = points_fd, col = Position,
+                      text = paste0(Name, ", ", Team))) +
+           geom_point() + 
+           geom_abline(slope = 130 / 60000, intercept = 0) +
+           ggtitle(paste0("Week ", week,  " Salary vs. Points on FanDuel")) + 
+           xlab("Salary ($)") +
+           ylab("Projected Points"))
+```
+
+In FanDuel cash games, 130 points is an arbitrary number that seems to win you 90% of the time. Thus, any point above this line are our "value" plays. They are projected to get over 2.2x value. However, studs are still studs. This line should help decided what lower tiered players to play, or maybe if there's a debate between two solid plays. As we get to lower salaries, however, there are less "value" plays. And this makes sense. DFS is about finding these low-priced values in order to be able to rightfully pay up for studs. Additionally, very rarely will we see any DST above this "value" threshold. This is why paying up for defenses doesn't make sense in the majority of scenarios; rather we should look for defenses that will provide us with the most points per dollar. Again, this frees up money to pay for our more expensive players. 
+
+
+```{r dk_pts_sal}
+ggplotly(total %>% 
+           ggplot(aes(x = salary_dk, y = points_dk, col = Position,
+                      text = paste0(Name, ", ", Team))) +
+           geom_point() + 
+           geom_abline(slope = 125 / 50000, intercept = 0) +
+           ggtitle(paste0("Week ", week,  " Salary vs. Points on DraftKings")) + 
+           xlab("Salary ($)") +
+           ylab("Projected Points"))
+```
+
+As per [DKNation](https://dknation.draftkings.com/nfl/2020/6/26/21309095/nfl-cash-game-strategy), we should target 125 points, putting us generally in the top 45% needed to win cash games. With DraftKings, we see a modest increase in the amount of value plays, as we see DST closer to our value threshold, as well as more middle-tiered players. Again, we'll make sure to pay up for studs, but we can see what value plays are out there.  
+
+
+
+# Stacks
+We can see how player are projected to do, but that doesn't help us outright with DFS. Often times, we want to create **stacks**, where we combine a team's QB and receiving options (WRs and TEs), so we can correlate our scores. We'll look at stacking the top receiver and their QB, along with the top two and three with their pass-thrower.
+
+```{r qb_wr}
+top_qb <- total %>% 
+  filter(Position == "QB") %>% 
+  group_by(Team, Name) %>% 
+  summarise(qb_pts = max(points_dk),
+            qb_sal = max(salary_dk)) %>% 
+  ungroup() %>% 
+  group_by(Team) %>% 
+  filter(qb_pts == max(qb_pts)) %>% 
+  rename("qb_name" = "Name")
+
+top_wr <- total %>% 
+  filter(Position %in% c("WR", "TE")) %>% 
+  group_by(Team, Name) %>% 
+  summarise(receiver_pts = max(points_dk),
+            receiver_sal = max(salary_dk)) %>% 
+  ungroup() %>% 
+  group_by(Team) %>% 
+  filter(receiver_pts == max(receiver_pts),) %>% 
+  rename("receiver_name" = "Name")
+
+top_2 <- total %>% 
+  filter(Position %in% c("WR", "TE")) %>% 
+  group_by(Team, Name) %>% 
+  summarise(receiver_pts = max(points_dk),
+            receiver_sal = max(salary_dk)) %>% 
+  ungroup() %>% 
+  group_by(Team) %>%
+  arrange(Team, desc(receiver_pts)) %>% 
+  slice(1:2)%>% 
+  rename("receiver_name" = "Name")
+
+top_3 <- total %>% 
+  filter(Position %in% c("WR", "TE")) %>% 
+  group_by(Team, Name) %>% 
+  summarise(receiver_pts = max(points_dk),
+            receiver_sal = max(salary_dk)) %>% 
+  ungroup() %>% 
+  group_by(Team) %>%
+  arrange(Team, desc(receiver_pts)) %>% 
+  slice(1:3)%>% 
+  rename("receiver_name" = "Name")
+
+stack1 <- full_join(top_qb, top_wr, by = "Team") %>% 
+  mutate(Total = sum(qb_pts + receiver_pts),
+         Salary = sum(qb_sal + receiver_sal)) %>% 
+  arrange(desc(Total))
+
+stack2 <- full_join(top_qb, top_2, by = "Team") %>% 
+  mutate(Total = sum(qb_pts + receiver_pts),
+         Salary = sum(qb_sal + receiver_sal)) %>% 
+  arrange(desc(Total))
+
+stack3 <- full_join(top_qb, top_3, by = "Team") %>% 
+  mutate(Total = sum(qb_pts + receiver_pts),
+         Salary = sum(qb_sal + receiver_sal)) %>% 
+  arrange(desc(Total))
+```
+
+## Stack 1
+
+We'll first look at a QB and top receiver stack:
+```{r stack1_output}
+stack1 %>% 
+  select(Total, Salary, Team, qb_name, qb_pts, qb_sal, receiver_name, receiver_pts, receiver_sal) %>% 
+  knitr::kable() %>% 
+  kable_styling(fixed_thead = TRUE) %>% 
+  collapse_rows(1:6, valign = "top") %>%
+  scroll_box(height = '700px', width = '100%')
+
+```
+
+
+## Stack 2
+
+Now, the top two receivers and their QB:
+
+```{r stack2_output}
+stack2 %>% 
+  select(Total, Salary, Team, qb_name, qb_pts, qb_sal, receiver_name, receiver_pts, receiver_sal) %>% 
+  knitr::kable() %>% 
+  kable_styling(fixed_thead = TRUE) %>% 
+  collapse_rows(1:6, valign = "top") %>%
+  scroll_box(height = '700px', width = '100%')
+```
+
+
+## Stack 3
+
+And finally, our most correlated stack. Often times, we would want to run this back with a receiver on the opposing team, but we'll deal with that later. 
+
+```{r stack3_output}
+stack3 %>% 
+  select(Total, Salary, Team, qb_name, qb_pts, qb_sal, receiver_name, receiver_pts, receiver_sal) %>% 
+  knitr::kable() %>% 
+  kable_styling(fixed_thead = TRUE) %>% 
+  collapse_rows(1:6, valign = "top") %>%
+  scroll_box(height = '700px', width = '100%')
+```
+
+
+Again, we'll want to see which of these stacks is the most expensive, so we'll graph the stacks projected points against their total salary. We'll look for more value in our stacks, since they're heavily correlated and are able to outperform their projections. 
+
+```{r stack3_value}
+stack1 %>% 
+  inner_join(logos) %>% 
+  ggplot(aes(Salary, Total)) + 
+  geom_image(aes(image = image))
+```
+
+

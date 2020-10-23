@@ -1,7 +1,6 @@
 ---
-title: "DFS Week 5" 
+title: "DFS Week 7" 
 author: "Jake Berberian"
-date: "9/20/2020"
 output: html_document
 ---
 
@@ -20,7 +19,7 @@ library(tictoc)
 ```
 
 ```{r specs, include = FALSE}
-week <- 5
+week <- 7
 
 scoring <- list(
   pass = list(
@@ -65,7 +64,7 @@ scoring <- list(
 
 ```{r scrape, results = "hide"}
 sources <- c("ESPN", "FantasyData", "FantasyPros", "FantasySharks", 
-             "FFToday", "NumberFire", "Yahoo", "FantasyFootballNerd", 
+             "Yahoo", "FantasyFootballNerd", "NumberFire",
              "RTSports", "Walterfootball")
 
 scrape <- scrape_data(src = sources,
@@ -82,7 +81,7 @@ projections <- projections_table(scrape, scoring_rules = scoring) %>%
 
 
 ```{r add_fd, include = FALSE}
-fan_duel <- read_csv("~/Fall_2020/MATH-390/Data/FanDuel-NFL-2020-10-11-50700-players-list.csv") %>% 
+fan_duel <- read_csv("~/Fall_2020/MATH-390/Data/FanDuel-NFL-2020-10-25-51091-players-list.csv") %>% 
   filter(is.na(`Injury Details`) | `Injury Indicator` == "Q") %>%
   mutate(`Last Name` = str_remove_all(`Last Name`, "((?i)III(?-i))"),
          `Last Name` = str_remove_all(`Last Name`, "((?i)II(?-i))"),
