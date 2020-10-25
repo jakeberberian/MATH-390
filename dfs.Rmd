@@ -268,7 +268,113 @@ As per [DKNation](https://dknation.draftkings.com/nfl/2020/6/26/21309095/nfl-cas
 # Stacks
 We can see how player are projected to do, but that doesn't help us outright with DFS. Often times, we want to create **stacks**, where we combine a team's QB and receiving options (WRs and TEs), so we can correlate our scores. We'll look at stacking the top receiver and their QB, along with the top two and three with their pass-thrower.
 
-```{r qb_wr}
+
+```{r qb_wr_fd}
+top_qb <- total %>% 
+  filter(Position == "QB") %>% 
+  group_by(Team, Name) %>% 
+  summarise(qb_pts = max(points_fd),
+            qb_sal = max(salary_fd)) %>% 
+  ungroup() %>% 
+  group_by(Team) %>% 
+  filter(qb_pts == max(qb_pts)) %>% 
+  rename("qb_name" = "Name")
+
+top_wr <- total %>% 
+  filter(Position %in% c("WR", "TE")) %>% 
+  group_by(Team, Name) %>% 
+  summarise(receiver_pts = max(points_fd),
+            receiver_sal = max(salary_fd)) %>% 
+  ungroup() %>% 
+  group_by(Team) %>% 
+  filter(receiver_pts == max(receiver_pts),) %>% 
+  rename("receiver_name" = "Name")
+
+top_2 <- total %>% 
+  filter(Position %in% c("WR", "TE")) %>% 
+  group_by(Team, Name) %>% 
+  summarise(receiver_pts = max(points_fd),
+            receiver_sal = max(salary_fd)) %>% 
+  ungroup() %>% 
+  group_by(Team) %>%
+  arrange(Team, desc(receiver_pts)) %>% 
+  slice(1:2)%>% 
+  rename("receiver_name" = "Name")
+
+top_3 <- total %>% 
+  filter(Position %in% c("WR", "TE")) %>% 
+  group_by(Team, Name) %>% 
+  summarise(receiver_pts = max(points_fd),
+            receiver_sal = max(salary_fd)) %>% 
+  ungroup() %>% 
+  group_by(Team) %>%
+  arrange(Team, desc(receiver_pts)) %>% 
+  slice(1:3)%>% 
+  rename("receiver_name" = "Name")
+
+stack1 <- full_join(top_qb, top_wr, by = "Team") %>% 
+  mutate(Total = sum(qb_pts + receiver_pts),
+         Salary = sum(qb_sal + receiver_sal)) %>% 
+  arrange(desc(Total))
+
+stack2 <- full_join(top_qb, top_2, by = "Team") %>% 
+  mutate(Total = sum(qb_pts + receiver_pts),
+         Salary = sum(qb_sal + receiver_sal)) %>% 
+  arrange(desc(Total))
+
+stack3 <- full_join(top_qb, top_3, by = "Team") %>% 
+  mutate(Total = sum(qb_pts + receiver_pts),
+         Salary = sum(qb_sal + receiver_sal)) %>% 
+  arrange(desc(Total))
+```
+
+## FanDuel
+### Stack 1
+
+We'll first look at a QB and top receiver stack:
+```{r stack1_fd}
+stack1 %>% 
+  mutate(Value = round(( Total / (Salary / 1000)), 3)) %>% 
+  select(Total, Salary, Value,  Team, qb_name, qb_pts, qb_sal, receiver_name, receiver_pts, receiver_sal) %>%
+  arrange(desc(Value, Total)) %>% 
+  knitr::kable() %>% 
+  kable_styling(fixed_thead = TRUE) %>% 
+  collapse_rows(1:7, valign = "top") %>%
+  scroll_box(height = '700px', width = '100%')
+```
+
+
+
+### Stack 2
+```{r stack2_fd}
+stack2 %>% 
+  mutate(Value = round(( Total / (Salary / 1000)), 3)) %>% 
+  select(Total, Salary, Value,  Team, qb_name, qb_pts, qb_sal, receiver_name, receiver_pts, receiver_sal) %>%
+  arrange(desc(Value, Total)) %>% 
+  knitr::kable() %>% 
+  kable_styling(fixed_thead = TRUE) %>% 
+  collapse_rows(1:6, valign = "top") %>%
+  scroll_box(height = '700px', width = '100%')
+```
+
+
+### Stack 3
+
+```{r stack3_fd}
+stack3 %>% 
+  mutate(Value = round(( Total / (Salary / 1000)), 3)) %>% 
+  select(Total, Salary, Value,  Team, qb_name, qb_pts, qb_sal, receiver_name, receiver_pts, receiver_sal) %>%
+  arrange(desc(Value, Total)) %>% 
+  knitr::kable() %>% 
+  kable_styling(fixed_thead = TRUE) %>% 
+  collapse_rows(1:6, valign = "top") %>%
+  scroll_box(height = '700px', width = '100%')
+```
+
+## DraftKings 
+### Stack 1
+
+```{r qb_wr_dk}
 top_qb <- total %>% 
   filter(Position == "QB") %>% 
   group_by(Team, Name) %>% 
@@ -327,27 +433,30 @@ stack3 <- full_join(top_qb, top_3, by = "Team") %>%
   arrange(desc(Total))
 ```
 
-## Stack 1
+
 
 We'll first look at a QB and top receiver stack:
-```{r stack1_output}
+```{r stack1_dk}
 stack1 %>% 
-  select(Total, Salary, Team, qb_name, qb_pts, qb_sal, receiver_name, receiver_pts, receiver_sal) %>% 
+  mutate(Value = round((Total / (Salary / 1000)), 3)) %>% 
+  select(Total, Salary, Value,  Team, qb_name, qb_pts, qb_sal, receiver_name, receiver_pts, receiver_sal) %>%
+  arrange(desc(Value, Total)) %>% 
   knitr::kable() %>% 
   kable_styling(fixed_thead = TRUE) %>% 
-  collapse_rows(1:6, valign = "top") %>%
+  collapse_rows(1:7, valign = "top") %>%
   scroll_box(height = '700px', width = '100%')
-
 ```
 
 
-## Stack 2
+### Stack 2
 
 Now, the top two receivers and their QB:
 
-```{r stack2_output}
+```{r stack2_dk}
 stack2 %>% 
-  select(Total, Salary, Team, qb_name, qb_pts, qb_sal, receiver_name, receiver_pts, receiver_sal) %>% 
+  mutate(Value = round((Total / (Salary / 1000)), 3)) %>% 
+  select(Total, Salary, Value,  Team, qb_name, qb_pts, qb_sal, receiver_name, receiver_pts, receiver_sal) %>%
+  arrange(desc(Value, Total)) %>% 
   knitr::kable() %>% 
   kable_styling(fixed_thead = TRUE) %>% 
   collapse_rows(1:6, valign = "top") %>%
@@ -355,13 +464,15 @@ stack2 %>%
 ```
 
 
-## Stack 3
+### Stack 3
 
 And finally, our most correlated stack. Often times, we would want to run this back with a receiver on the opposing team, but we'll deal with that later. 
 
-```{r stack3_output}
+```{r stack3_dk}
 stack3 %>% 
-  select(Total, Salary, Team, qb_name, qb_pts, qb_sal, receiver_name, receiver_pts, receiver_sal) %>% 
+  mutate(Value = round(( Total / (Salary / 1000)), 3)) %>% 
+  select(Total, Salary, Value,  Team, qb_name, qb_pts, qb_sal, receiver_name, receiver_pts, receiver_sal) %>%
+  arrange(desc(Value, Total)) %>% 
   knitr::kable() %>% 
   kable_styling(fixed_thead = TRUE) %>% 
   collapse_rows(1:6, valign = "top") %>%
@@ -371,11 +482,5 @@ stack3 %>%
 
 Again, we'll want to see which of these stacks is the most expensive, so we'll graph the stacks projected points against their total salary. We'll look for more value in our stacks, since they're heavily correlated and are able to outperform their projections. 
 
-```{r stack3_value}
-stack1 %>% 
-  inner_join(logos) %>% 
-  ggplot(aes(Salary, Total)) + 
-  geom_image(aes(image = image))
-```
 
 
