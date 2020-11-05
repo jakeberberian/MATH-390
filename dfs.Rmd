@@ -1,5 +1,5 @@
 ---
-title: "DFS Week 8" 
+title: "DFS Week 9" 
 author: "Jake Berberian"
 output: html_document
 ---
@@ -20,8 +20,8 @@ library(tictoc)
 ```
 
 ```{r info}
-week <- 8
-fd_data <- "~/Fall_2020/MATH-390/Data/FanDuel-NFL-2020-11-01-51232-players-list.csv"
+week <- 9
+fd_data <- "~/Fall_2020/MATH-390/Data/FanDuel-NFL-2020-11-08-51377-players-list.csv"
 dk_data <- "~/Fall_2020/MATH-390/Data/DKSalaries.csv"
 ```
 
@@ -353,7 +353,7 @@ stack2 %>%
   arrange(desc(Value, Total)) %>% 
   knitr::kable() %>% 
   kable_styling(fixed_thead = TRUE) %>% 
-  collapse_rows(1:6, valign = "top") %>%
+  collapse_rows(1:7, valign = "top") %>%
   scroll_box(height = '700px', width = '100%')
 ```
 
@@ -367,7 +367,7 @@ stack3 %>%
   arrange(desc(Value, Total)) %>% 
   knitr::kable() %>% 
   kable_styling(fixed_thead = TRUE) %>% 
-  collapse_rows(1:6, valign = "top") %>%
+  collapse_rows(1:7, valign = "top") %>%
   scroll_box(height = '700px', width = '100%')
 ```
 
@@ -459,7 +459,7 @@ stack2 %>%
   arrange(desc(Value, Total)) %>% 
   knitr::kable() %>% 
   kable_styling(fixed_thead = TRUE) %>% 
-  collapse_rows(1:6, valign = "top") %>%
+  collapse_rows(1:7, valign = "top") %>%
   scroll_box(height = '700px', width = '100%')
 ```
 
@@ -475,7 +475,7 @@ stack3 %>%
   arrange(desc(Value, Total)) %>% 
   knitr::kable() %>% 
   kable_styling(fixed_thead = TRUE) %>% 
-  collapse_rows(1:6, valign = "top") %>%
+  collapse_rows(1:7, valign = "top") %>%
   scroll_box(height = '700px', width = '100%')
 ```
 
