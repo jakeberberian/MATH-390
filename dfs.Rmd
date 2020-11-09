@@ -14,7 +14,6 @@ library(ffanalytics)
 library(lpSolve)
 library(rPref)
 library(kableExtra)
-library(ggimage)
 library(plotly)
 library(tictoc)
 ```
@@ -25,7 +24,7 @@ fd_data <- "~/Fall_2020/MATH-390/Data/FanDuel-NFL-2020-11-08-51377-players-list.
 dk_data <- "~/Fall_2020/MATH-390/Data/DKSalaries.csv"
 ```
 
-```{r colors}
+```{r colors, eval = FALSE}
 logos <- read_csv("https://raw.githubusercontent.com/leesharpe/nfldata/master/data/teamcolors.csv") %>% 
   rename("Team" = "team")
 ```
@@ -115,7 +114,7 @@ scoring_dk <- list(
 
 ```{r scrape, results = "hide"}
 sources <- c("ESPN", "FantasyData", "FantasyPros", "FantasySharks", 
-             "Yahoo", "FantasyFootballNerd", "NumberFire",
+             "FantasyFootballNerd", "NumberFire", "Yahoo",
              "RTSports", "Walterfootball")
 
 scrape <- scrape_data(src = sources,
