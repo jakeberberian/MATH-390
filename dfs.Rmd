@@ -1,5 +1,5 @@
 ---
-title: "DFS Week 9" 
+title: "DFS Week 14" 
 author: "Jake Berberian"
 output: html_document
 ---
@@ -19,15 +19,11 @@ library(tictoc)
 ```
 
 ```{r info}
-week <- 9
-fd_data <- "~/Fall_2020/MATH-390/Data/FanDuel-NFL-2020-11-08-51377-players-list.csv"
+week <- 14
+fd_data <- "~/Fall_2020/MATH-390/Data/FanDuel-NFL-2020-12-13-52276-players-list.csv"
 dk_data <- "~/Fall_2020/MATH-390/Data/DKSalaries.csv"
 ```
 
-```{r colors, eval = FALSE}
-logos <- read_csv("https://raw.githubusercontent.com/leesharpe/nfldata/master/data/teamcolors.csv") %>% 
-  rename("Team" = "team")
-```
 
 
 ```{r fd_specs, include = FALSE}
@@ -114,7 +110,7 @@ scoring_dk <- list(
 
 ```{r scrape, results = "hide"}
 sources <- c("ESPN", "FantasyData", "FantasyPros", "FantasySharks", 
-             "FantasyFootballNerd", "NumberFire", "Yahoo",
+             "FantasyFootballNerd", "Yahoo",
              "RTSports", "Walterfootball")
 
 scrape <- scrape_data(src = sources,

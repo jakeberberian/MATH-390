@@ -1,5 +1,5 @@
 ---
-title: "DFS Week 9" 
+title: "DFS Week 15" 
 author: "Jake Berberian"
 output: html_document
 ---
@@ -19,8 +19,8 @@ library(tictoc)
 ```
 
 ```{r specs, include = FALSE}
-week <- 9
-data_fd <- "~/Fall_2020/MATH-390/Data/FanDuel-NFL-2020-11-08-51377-players-list.csv"
+week <- 15
+data_fd <- "~/Fall_2020/MATH-390/Data/FanDuel-NFL-2020-12-20-52491-players-list.csv"
 
 
 scoring <- list(

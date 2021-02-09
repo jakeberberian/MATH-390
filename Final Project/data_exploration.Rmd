@@ -1,0 +1,69 @@
+---
+title: "Toy Data Exploration"
+author: "Jake Berberian"
+date: "11/28/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library, include = FALSE}
+library(tidyverse)
+library(kableExtra)
+```
+
+```{r data, eval = FALSE}
+nfl2013 <- read_csv("~/Downloads/nfl2013lines.csv")
+bal_den <- read_csv("~/Downloads/bal_den.csv")
+```
+
+
+# Toy Data
+
+```{r data_glimpse, eval = FALSE}
+head(bal_den, 5)[1:6]
+```
+
+
+```{r scoring, eval = FALSE}
+pass_yd <- 0.04
+pass_td <- 4
+int <- -2
+rush_yd <- 0.1
+rush_td <- 6
+rec <- 0.5
+rec_yd <- 0.1
+rec_td <- 6
+ret_td <- 6
+two_pt <- 2
+fmbl <- -2
+pat <- 1
+fg_19 <- 1
+fg_29 <- 2
+fg_39 <- 3
+fg_49 <- 4
+fg_50 <- 5
+```
+
+
+```{r add_ft_pts, eval = FALSE}
+bal_den <- bal_den %>% 
+  mutate(ft_pts = pass_yds * pass_yd + pass_tds * pass_td + ints * int + rush_yds * rush_yd + rush_tds * rush_td + 
+           recs * rec + rec_yds * rec_yd + rec_tds * rec_td + ret_tds * ret_td + two_pts * two_pt + fmbls * fmbl + 
+           pats * pat + fg_19s * fg_19 + fg_29s * fg_29 + fg_39s * fg_39 + fg_49s * fg_49 + fg_50s * fg_50)
+```
+
+```{r team_totals, eval = FALSE}
+bal_den %>% 
+  group_by(Team) %>% 
+  summarize(ft_pts = sum(ft_pts))
+```
+
+Final score of the game
+
+DEN: 49 
+BAL: 27
+
+The Ravens lost by a factor of `r round(49/27, 3)`, while fantasy-wise they lost by a factor of `r round(159.68/97.48, 3)`
